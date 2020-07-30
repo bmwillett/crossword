@@ -6,9 +6,35 @@ log = logging.getLogger("TR_logger")
 log.setLevel(logging.DEBUG)
 
 import pygame as pg
+from tkinter import filedialog
+import tkinter as tk
+
+def open_file():
+    # Make a top-level instance and hide since it is ugly and big.
+    root = tk.Tk()
+    root.withdraw()
+
+    # Make it almost invisible - no decorations, 0 size, top left corner.
+    root.overrideredirect(True)
+    root.geometry('0x0+0+0')
+
+    # Show window again and lift it to top so it can get focus,
+    # otherwise dialogs will end up behind the terminal.
+    root.deiconify()
+    root.lift()
+    root.focus_force()
+
+    filename = filedialog.askopenfilename(parent=root)  # Or some other dialog
+
+    # Get rid of the top-level instance once to make it actually invisible.
+    root.destroy()
+
+    return filename
+
+fname = open_file()
 
 pg.init()
-screen = pg.display.set_mode((700, 750))
+screen = pg.display.set_mode((900, 950))
 
 COLOR_INACTIVE = pg.Color('white')
 COLOR_ACTIVE = pg.Color('yellow')
@@ -41,7 +67,7 @@ class Board:
 
         # handle clue
         self.current_clue = ''
-        self.clue_bg = pg.Rect(0, self.board_h, self.board_w, CLUE_HEIGHT)
+        self.clue_bg = pg.Rect(0, 0, self.board_w, CLUE_HEIGHT)
         self.clue_text = FONT.render(self.current_clue, True, COLOR_TEXT)
         self.clues = {cell : self.across_cells[cell][0] for cell in self.across_cells}
         self.clues.update({cell: self.down_cells[cell][0] for cell in self.down_cells})
@@ -51,7 +77,7 @@ class Board:
             for c in range(self.cols):
                 if self.board[r][c] != '.':
                     self.input_boxes.append(InputBox(int(self.board_w * c / self.cols),
-                                                     int(self.board_h * r / self.rows),
+                                                     CLUE_HEIGHT + int(self.board_h * r / self.rows),
                                                      int(self.board_w / self.cols),
                                                      int(self.board_h / self.rows)))
                     if len(self.input_boxes)-1 in self.clues:
@@ -161,7 +187,7 @@ class Board:
         # TODO: format longer clues correctly
         self.clue_text = FONT.render(self.current_clue, True, COLOR_TEXT)
         pg.draw.rect(screen, COLOR_CLUE_BG, self.clue_bg, 0)
-        screen.blit(self.clue_text, (5, self.board_h+5))
+        screen.blit(self.clue_text, (5, 5))
 
 
 class NullBox:
@@ -258,5 +284,5 @@ def main(filename):
 
 
 if __name__ == '__main__':
-    main('./puzzles/Jul2820.puz')
+    main(fname)
     pg.quit()

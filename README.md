@@ -27,6 +27,22 @@ For the priority search, we will experiment with several heuristics to try to fi
 
 **solver.py** (TBC) - algorithm to solve crossword using clue_model to generate candidate clues
 
+## TO DO:
+
+ - create clue_model.py
+    - parse output from clue_scraper
+    - remove stop words
+    - tokenize
+    - look into training options (BERT? simpler things?)
+    - get more data
+    - train and test
+ - create solver.py
+    - think more about algorithm
+    - start with small puzzles
+    - start with set of answers provided
+ - once both working reasonably well, integrate into GUI
+ - get working with gaffney email for fast solving!
+    
 ## AUTHOR
 
 Brian Willett
