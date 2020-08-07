@@ -1,6 +1,5 @@
 # Neural Net Crossword Solver
 
-
 ## IDEA
 
 This is a python application which inlcudes functionality to automatically solve crossword puzzles.
@@ -26,6 +25,22 @@ For the priority search, we will experiment with several heuristics to try to fi
 **clue_model.py** (TBC) - model that outputs candidate answers given a clue sentence
 
 **solver.py** (TBC) - algorithm to solve crossword using clue_model to generate candidate clues
+
+## SOLVER ALGORITHM:
+
+- input: crossword puzzle grid with list of clues
+- initialize: create queue with single entry being a tuple containing:
+    - the empty grid
+    - the score of the empty grid, which we define to be zero
+    - list of incomplete entries (in this case, all of them)
+- main loop:
+    - take entry in queue with highest score
+    - for each incomplete entry:
+        - call clue solver to find most likely answer and score of this new word
+        - add new entry to queue with updated grid, score (= old score + new word score) and incomplete entries
+- continue main loop until grid is complete
+
+
 
 ## TO DO:
 
