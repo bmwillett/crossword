@@ -22,41 +22,58 @@ For the priority search, we will experiment with several heuristics to try to fi
 
 **clue_scraper.py** - extracts clues and answers from puz files, assembles into dataset used for training classifier
 
-**clue_models.py** - various models that outputs candidate answers given a clue sentence
+**clue_model.py** - neural net model that outputs candidate answers given a clue sentence
 
-**solver.py**  - main algorithm to solve crossword using clue_model to generate candidate clues
+**clue_solvers.py** - various algorithms that generate a list of candidate answers from the list of clues. includes:
+
+ - oracle - has access to correct answer, can add alternative (wrong) answers as well, used for testing
+ - web solver - searches www.wordplays.com for most likely answers for a given clue
+ - bert solver - uses BERT model to find candidate answers
+ 
+**solver.py**  - main algorithm to solve crossword using a clue solver to generate candidate clues
 
 ## SOLVER ALGORITHM:
 
-- input: crossword puzzle grid with list of clues
-- initialize: create queue with single entry being a tuple containing:
-    - the empty grid
-    - the score of the empty grid, which we define to be zero
-    - list of incomplete entries (in this case, all of them)
-- main loop:
-    - take entry in queue with highest score
-    - for each incomplete entry:
-        - call clue solver to find most likely answer and score of this new word
-        - add new entry to queue with updated grid, score (= old score + new word score) and incomplete entries
-- continue main loop until grid is complete
+### Backtracking
 
+input: 
+- crossword puzzle grid with list of clues
+- integer parameter 'NUM_EXCLUDED' = maximum number of clues not coming from candidate list
+- integer parameter 'MAX_ITERS' = maximum iterations of main loop before quitting
 
+1. obtain list of candidate answers for each entry using a clue solver
+2. initialize stack with empty grid
+3. main loop:
+    - pop element from stack
+    - try candidate from most constrained remaining entry (least remaining candidates)
+    - check if number of entries with no remaining possible candidates <= NUM_EXCLUDED
+    - if so, add to stack and continue, otherwise try next candidate
+    - when run out of candidates, try next entry
+    - when run out of entries, backtrack
+4. continue main loop until find solution or hit MAX_ITERS
+5. exit into GUI with (partially) solved grid for inspection
 
-## TO DO:
+<!---
+## TODO:
 
- - create clue_model.py
-    - parse output from clue_scraper
-    - remove stop words
-    - tokenize
-    - look into training options (BERT? simpler things?)
-    - get more data
-    - train and test
- - create solver.py
-    - think more about algorithm
-    - start with small puzzles
-    - start with set of answers provided
- - once both working reasonably well, integrate into GUI
+ - BERT model
+    - use as language model?
+    - classifier?
+    - generative version?
+ - web scraper model
+    - way to get around banning? (VPN, proxy?)
+    - other websites/datasets?
+ - solver
+    - current backtracking algorithm somewhat slow, can improve?
+    - priority queue faster? how to score?
+    - way to enforce answers are english words?
+    - better OOP? (depends on final algo and mergning with GUI)
+ - GUI
+    - incoporate better with solver
+    - save as puz files upon close?
+  
  - get working with gaffney email for fast solving!
+!--->
     
 ## AUTHOR
 
