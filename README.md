@@ -20,11 +20,11 @@ For the priority search, we will experiment with several heuristics to try to fi
 
 **puz_scaper.py** - downloads crossword puz files from web, saves into folder ./puzzles
 
-**clue_scraper.py** (TBC) - extracts clues and answers from puz files, assembles into dataset used for training classifier
+**clue_scraper.py** - extracts clues and answers from puz files, assembles into dataset used for training classifier
 
-**clue_model.py** (TBC) - model that outputs candidate answers given a clue sentence
+**clue_models.py** - various models that outputs candidate answers given a clue sentence
 
-**solver.py** (TBC) - algorithm to solve crossword using clue_model to generate candidate clues
+**solver.py**  - main algorithm to solve crossword using clue_model to generate candidate clues
 
 ## SOLVER ALGORITHM:
 
