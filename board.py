@@ -1,13 +1,18 @@
 import logging
 import puz
+import pygame as pg
+from tkinter import filedialog
+import tkinter as tk
+import os
+import shutil
+
+from solver import solve_puz
 
 logging.basicConfig()
 log = logging.getLogger("TR_logger")
 log.setLevel(logging.DEBUG)
 
-import pygame as pg
-from tkinter import filedialog
-import tkinter as tk
+PUZ_DIR = './data/puzzles/'
 
 def open_file():
     # Make a top-level instance and hide since it is ugly and big.
@@ -49,7 +54,7 @@ CLUE_NUM_FONT = pg.font.Font(None, 16)
 CLUE_HEIGHT = 50
 
 class Board:
-    def __init__(self, w, h, p):
+    def __init__(self, w, h, p, board=None):
         self.input_boxes = []
         self.rows, self.cols = p.height, p.width
         self.board_w, self.board_h = w, h-CLUE_HEIGHT
@@ -61,7 +66,7 @@ class Board:
         self.across_cells = {cell_dat['cell']: (cell_dat['num'], cell_dat['clue']) for cell_dat in numbering.across}
         self.down_cells = {cell_dat['cell']:  (cell_dat['num'], cell_dat['clue'])for cell_dat in numbering.down}
 
-        self.board = [[p.fill[r * p.width + c] for c in range(p.width)] for r in range(p.height)]
+        self.board = [[p.fill[r * p.width + c] for c in range(p.width)] for r in range(p.height)] if board is None else board
         self.sel_across = True
         self.active_word_cell = None
 
@@ -69,7 +74,7 @@ class Board:
         self.current_clue = ''
         self.clue_bg = pg.Rect(0, 0, self.board_w, CLUE_HEIGHT)
         self.clue_text = FONT.render(self.current_clue, True, COLOR_TEXT)
-        self.clues = {cell : self.across_cells[cell][0] for cell in self.across_cells}
+        self.clues = {cell: self.across_cells[cell][0] for cell in self.across_cells}
         self.clues.update({cell: self.down_cells[cell][0] for cell in self.down_cells})
 
         # create boxes in grid
@@ -82,6 +87,10 @@ class Board:
                                                      int(self.board_h / self.rows)))
                     if len(self.input_boxes)-1 in self.clues:
                         self.input_boxes[-1].clue_num = str(self.clues[len(self.input_boxes)-1])
+                    if board[r][c] != '-':
+                        self.input_boxes[-1].text = board[r][c].upper()
+                        self.input_boxes[-1].txt_surface = FONT.render(board[r][c].upper(), True, COLOR_TEXT)
+
                 else:
                     self.input_boxes.append(NullBox())
 
@@ -246,7 +255,6 @@ class InputBox:
         self.color = COLOR_ACTIVE if self.inactiveword else COLOR_INACTIVE
         pg.draw.rect(screen, self.color, self.rect, 0)
         if self.text != '':
-            # TODO: replace hardcoded centering of text (and fix font size)
             txt_w, txt_h = self.txt_surface.get_rect().w, self.txt_surface.get_rect().h
             offset_x, offset_y = (self.w-txt_w)//2, (self.h-txt_h)//2
             screen.blit(self.txt_surface, (self.rect.x + offset_x, self.rect.y + offset_y))
@@ -259,13 +267,23 @@ class InputBox:
 
 def main(filename):
 
+    puz_name = os.path.basename(fname)[:-4]
+    if os.path.realpath(filename[:-(len(puz_name)+4)]) != os.path.realpath(PUZ_DIR):
+        # save copy of puzzle in puzzle directory
+        with open(fname, 'rb') as fr:
+            with open (PUZ_DIR + puz_name + '.puz', 'wb') as fw:
+                shutil.copyfileobj(fr, fw)
+
+    # generate (partial) solution
+    sol, clue_model = solve_puz(puz_name, clue_model="web")
+
     # load crossword data
     p = puz.read(filename)
     pg.display.set_caption('"' + p.title + '" ' + p.author)
 
     # set up screen
     w, h = pg.display.get_surface().get_size()
-    board = Board(w, h, p)
+    board = Board(w, h, p, board=sol.grid)
 
     clock = pg.time.Clock()
     done = False
@@ -281,6 +299,8 @@ def main(filename):
 
         pg.display.flip()
         clock.tick(30)
+
+    import IPython; IPython.embed(); exit(1)
 
 
 if __name__ == '__main__':

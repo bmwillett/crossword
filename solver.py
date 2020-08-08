@@ -1,36 +1,5 @@
 """
-Given a crossword (DECIDE FORMAT), and a model to produce candidate words (DECIDE FORMAT),
-generate most likely solution
-
-for each clue, the model presents a set of candidate answers with probabilities
-then the algorithm tries to generate a globally consistent solution with the highest probabiliity
-
---------------------------------
-EXAMPLE 2x2 crossword:
-
-clue probabilities:
-1A. {'aa': 0.9, 'ab': 0.1}
-2A. {'ab': 0.9, 'bb': 0.1}
-1D. {'aa': 0.9, 'ab': 0.1}
-2D. {'bb': 0.9, 'ab': 0.1}
-
-possible consistent solutions:
-
-AA
-BB
-
-probability ~  0.9 * 0.1 * 0.1 * 0.1
-
-AB
-AB
-
-probability ~ 0.1 * 0.9 * 0.9 * 0.9
-
--> second solution is preferred
-
--------------------------------
-
-Solving algorithm ideas:
+Solving algorithms:
 
 BACKTRACKING ALGORITHM:
 
@@ -60,10 +29,7 @@ import puz
 from heapq import heappop, heappush
 from collections import defaultdict
 import logging
-import string
-from tqdm import tqdm
 import os
-import pickle
 
 from clue_solvers import Oracle, WebSolver
 
@@ -72,14 +38,13 @@ log = logging.getLogger("crossword_logger")
 log.setLevel(logging.INFO)
 
 PUZ_DIR = './data/puzzles/'
-EXAMPLE_PUZ = 'Jul0220.puz'
-EXAMPLE_PUZ = 'mgwcc636.puz'
-ALPHABET = list(string.ascii_lowercase)
-
+EXAMPLE_PUZ = 'Jul0220'
+EXAMPLE_PUZ = 'mgwcc636'
+MAX_EXCLUDED = 50
+MAX_ITERS = 50000
+PRINT_FREQ = 10000
 
 class Grid:
-    k = 0
-
     def __init__(self, grid, remaining_candidates, num_excluded=0):
         """
         :param grid: partially complete crossword grid (list of list of chars)
@@ -124,7 +89,7 @@ class Grid:
         tries to place 'word' in grid at location 'cell'
         checks:
          - word fits in grid
-         - does not cause more than self.k errors
+         - does not cause more than MAX_EXCLUDED errors
 
         returns new Grid object with placed word if successful, else None
         """
@@ -150,11 +115,8 @@ class Grid:
         for (_entry_idx, pos), c in zip(crossings, word):
             new_entry_candidates = []
             for cand_idx in new_remaining_candidates.get(_entry_idx, []):
-                try:
-                    if candidates[_entry_idx][cand_idx][pos] == c:
-                        new_entry_candidates.append(cand_idx)
-                except:
-                    import IPython; IPython.embed(); exit(1)
+                if candidates[_entry_idx][cand_idx][pos] == c:
+                    new_entry_candidates.append(cand_idx)
             if len(new_entry_candidates) > 0:
                 new_remaining_candidates[_entry_idx] = new_entry_candidates
             else:
@@ -162,7 +124,7 @@ class Grid:
                     del new_remaining_candidates[_entry_idx]
                     new_num_excluded += 1
 
-        if new_num_excluded > self.k:
+        if new_num_excluded > MAX_EXCLUDED:
             log.debug("too many excluded -> invalid entry!")
             return None
         log.debug("found valid entry!")
@@ -177,7 +139,7 @@ class Grid:
             else:
                 r += 1
 
-        if log.level == logging.DEBUG or True:
+        if log.level == logging.DEBUG:
             log.debug("new grid:")
             self.print()
 
@@ -206,14 +168,6 @@ class Grid:
         print('‾'*(2*self.width+1) + '\n')
         print("current num_exlcuded = ", self.num_excluded)
 
-    @property
-    def entries_to_try(self):
-        pass
-
-    @property
-    def entry_candidates_to_try(self):
-        pass
-
 
 def get_intersections(entries, grid):
     width, height = len(grid[0]), len(grid)
@@ -238,8 +192,9 @@ def get_intersections(entries, grid):
     return intersections
 
 
-def solve_puz(filename, clue_model=None, load_candidates=True, save_candidates=False):
-    p = puz.read(PUZ_DIR + filename)
+def solve_puz(puz_name, clue_model=None, load_candidates=True, save_candidates=False):
+
+    p = puz.read(PUZ_DIR + puz_name + '.puz')
 
     numbering = p.clue_numbering()
     initial_grid = [[c for c in numbering.grid[i * p.width:(i + 1) * p.width]] for i in range(p.height)]
@@ -257,9 +212,12 @@ def solve_puz(filename, clue_model=None, load_candidates=True, save_candidates=F
     intersections = get_intersections(entries, initial_grid)
 
     if clue_model is None:
-        clue_model = Oracle(p, filename)
+        clue_model = Oracle(p, entries, puz_name, load=load_candidates, save=save_candidates)
+    elif clue_model == 'web':
+        clue_model = WebSolver(entries, puz_name, load=load_candidates, save=save_candidates)
 
-    initial_remaining_candidates = {idx: list(range(len(clue_model.candidates[idx])))[::-1] for idx in candidates}
+    initial_remaining_candidates = {idx: list(range(len(clue_model.candidates[idx])))[::-1]
+                                    for idx in clue_model.candidates}
 
     # backtracking solution
     stack = [Grid(initial_grid, initial_remaining_candidates)]
@@ -272,14 +230,15 @@ def solve_puz(filename, clue_model=None, load_candidates=True, save_candidates=F
     #  - finally, go back and work more on BERT model
 
     iters = 0
-    MAX_ITERS = 100
     while stack:
-        input("press enter to continue")
-        iters += 1
-        if iters > MAX_ITERS:
-            return None
         grid = stack.pop()
         found_next = False
+
+        if iters > MAX_ITERS:
+            return grid, clue_model
+        if iters % PRINT_FREQ == 0:
+            grid.print()
+        iters += 1
 
         while grid.candidates_to_try:
             entry_idx = grid.candidates_to_try.pop()
@@ -289,12 +248,12 @@ def solve_puz(filename, clue_model=None, load_candidates=True, save_candidates=F
 
             while cand_idx_list:
                 cand_idx = cand_idx_list.pop()
-                candidate_word = candidates[entry_idx][cand_idx]
+                candidate_word = clue_model.candidates[entry_idx][cand_idx]
 
                 new_grid = grid.place(candidate_word, entry_idx, entries, clue_model.candidates, crossings)
                 if new_grid:
                     if new_grid.is_filled:
-                        return new_grid
+                        return new_grid, clue_model
                     grid.entry_idx_to_try, grid.cand_idx_to_try = entry_idx, cand_idx + 1
                     stack.append(grid)
                     stack.append(new_grid)
@@ -307,6 +266,6 @@ def solve_puz(filename, clue_model=None, load_candidates=True, save_candidates=F
 
 
 if __name__ == '__main__':
-    sol = solve_puz(EXAMPLE_PUZ, clue_model=WebSolver())
+    sol, clue_model = solve_puz(EXAMPLE_PUZ, clue_model="web")
 
     import IPython; IPython.embed(); exit(1)
