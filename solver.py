@@ -41,10 +41,10 @@ then we will iterate through k, starting at zero, and find the first k for which
 
 algorithm A_k:
     - initialize stack with:
-    [ (empty grid, entry_idx_to_try = 0, candidate_idx_to_try = 0)]
+    [ (empty grid, entry_idx_to_try = 0, cand_idx_to_try = 0)]
     - while stack is non-empty:
         - pop from stack
-        - go through possible entries, starting with entry_idx_to_try, candidate_idx_to_try:
+        - go through possible entries, starting with entry_idx_to_try, cand_idx_to_try:
             - see if fits in grid
             - if fits in grid, see how many mistakes (must be <=k)
         - if passes, add original grid and new grid back to queue and repeat
@@ -52,43 +52,61 @@ algorithm A_k:
 
 PRIORITY QUEUE ALGORITHM:
 
- TODO: implement
-
+ TODO: implement this, if necessary
 
 """
 
 import puz
-import numpy as np
 from heapq import heappop, heappush
 from collections import defaultdict
 import logging
 import string
 from tqdm import tqdm
+import os
+import pickle
 
 from clue_solvers import Oracle, WebSolver
 
 logging.basicConfig()
 log = logging.getLogger("crossword_logger")
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
-EXAMPLE_PUZ = './data/puzzles/Jul0120.puz'
+PUZ_DIR = './data/puzzles/'
+EXAMPLE_PUZ = 'Jul0220.puz'
+EXAMPLE_PUZ = 'mgwcc636.puz'
 ALPHABET = list(string.ascii_lowercase)
 
 
 class Grid:
-    k = 1
+    k = 0
 
-    def __init__(self, grid, candidates_left, num_missing=0):
+    def __init__(self, grid, remaining_candidates, num_excluded=0):
+        """
+        :param grid: partially complete crossword grid (list of list of chars)
+
+        :param remaining_candidates:  candidates to try next, stored in the format:
+        [ (entry_idx_1, [cand_idx_1, ...]), ...]
+
+        where entry_idx_i is the index in entries, and cand_idx_i is the index in candidates[entry_idx_i]
+
+        Note: elements to try next appear at the end of lists, so that they may be popped
+
+        :param num_excluded: number of entries in the grid where no candidates remain
+        """
         self.grid = [[c for c in row] for row in grid]
-        self.candidates_left = [[x for x in row] for row in candidates_left]
-        self.num_missing = num_missing
+        self.remaining_candidates = {entry_idx: [cand_idx for cand_idx in remaining_candidates[entry_idx]]
+                                     for entry_idx in remaining_candidates}
+        self.num_excluded = num_excluded
+
+        # determine candidate order
+        self.candidates_to_try = [entry_idx for _, entry_idx in sorted(
+            [(len(self.remaining_candidates[entry_idx]), entry_idx) for entry_idx in self.remaining_candidates],
+            reverse=True)]
 
         self.width, self.height = len(grid[0]), len(grid)
-        self.entry_idx_to_try = 0
-        self.candidate_idx_to_try = 0
 
     def get_entry(self, cell, AD):
-        r, c = cell//self.width, cell % self.width
+        r, c = cell // self.width, cell % self.width
         out = []
         if AD == 'A':
             while c < self.width and self.grid[r][c] != '.':
@@ -101,7 +119,7 @@ class Grid:
 
         return ''.join(out)
 
-    def place(self, word, cell, AD, crossings, candidates):
+    def place(self, word, entry_idx, entries, candidates, crossings):
         """
         tries to place 'word' in grid at location 'cell'
         checks:
@@ -111,39 +129,47 @@ class Grid:
         returns new Grid object with placed word if successful, else None
         """
 
-        # check if word fits in grid
-        slot = self.get_entry(cell, AD)
-
-        # check if already filled
-        if not any([c == '-' for c in slot]):
-            return None
+        cell, AD, length, _ = entries[entry_idx].values()
 
         log.debug(f"trying to fit {word} in cell {cell}")
 
+        # check if word fits in grid
+        slot = self.get_entry(cell, AD)
         if len(word) != len(slot) or any([c1 != c2 and c2 != '-' for c1, c2 in zip(word, slot)]):
             log.debug("doesn't fit in space -> invalid entry")
             return None
         log.debug("fits in space!")
 
+        # make copies of parameters to create new Grid object
+        new_remaining_candidates = {_entry_idx: [cand_idx for cand_idx in self.remaining_candidates[_entry_idx]]
+                                    for _entry_idx in self.remaining_candidates}
+        del new_remaining_candidates[entry_idx]
+        new_num_excluded = self.num_excluded
+
         # check crossings to see what candidates are eliminated
-        new_candidates_left = [[x for x in row] for row in self.candidates_left]
-        new_num_missing = self.num_missing
+        for (_entry_idx, pos), c in zip(crossings, word):
+            new_entry_candidates = []
+            for cand_idx in new_remaining_candidates.get(_entry_idx, []):
+                try:
+                    if candidates[_entry_idx][cand_idx][pos] == c:
+                        new_entry_candidates.append(cand_idx)
+                except:
+                    import IPython; IPython.embed(); exit(1)
+            if len(new_entry_candidates) > 0:
+                new_remaining_candidates[_entry_idx] = new_entry_candidates
+            else:
+                if _entry_idx in new_remaining_candidates:
+                    del new_remaining_candidates[_entry_idx]
+                    new_num_excluded += 1
 
-        for (entry_idx, pos), c in zip(crossings, word):
-            for i, candidate in enumerate(candidates[entry_idx]):
-                if candidate[pos] != c:
-                    new_candidates_left[entry_idx][i] = False
-            if any(self.candidates_left[entry_idx]) and not any(new_candidates_left[entry_idx]):
-                new_num_missing += 1
-
-        if new_num_missing > self.k:
-            log.debug("too many wrong -> invalid entry!")
+        if new_num_excluded > self.k:
+            log.debug("too many excluded -> invalid entry!")
             return None
-        log.debug("not too many wrong -> valid entry!")
+        log.debug("found valid entry!")
 
         # valid entry, create new Grid object
         new_grid = [[c for c in row] for row in self.grid]
-        r, c = cell//self.width, cell % self.width
+        r, c = cell // self.width, cell % self.width
         for i in range(len(word)):
             new_grid[r][c] = word[i]
             if AD == 'A':
@@ -151,10 +177,11 @@ class Grid:
             else:
                 r += 1
 
-        if log.level == logging.DEBUG:
+        if log.level == logging.DEBUG or True:
+            log.debug("new grid:")
             self.print()
 
-        newGrid = Grid(new_grid, new_candidates_left, new_num_missing)
+        newGrid = Grid(new_grid, new_remaining_candidates, new_num_excluded)
         return newGrid
 
     @property
@@ -163,22 +190,34 @@ class Grid:
 
     def print(self):
         print("\ngrid:")
+        print('_'*(2*self.width+1))
         for row in self.grid:
-            line = []
+            line = ['|']
             for c in row:
                 if c == '-':
                     line.append(' ')
                 elif c == '.':
-                    line.append('#')
+                    line.append('■')
                 else:
                     line.append(c.upper())
+                line.append(' ')
+            line[-1] = '|'
             print(''.join(line))
-        print("\n")
+        print('‾'*(2*self.width+1) + '\n')
+        print("current num_exlcuded = ", self.num_excluded)
+
+    @property
+    def entries_to_try(self):
+        pass
+
+    @property
+    def entry_candidates_to_try(self):
+        pass
 
 
 def get_intersections(entries, grid):
     width, height = len(grid[0]), len(grid)
-    cells = [{} for _ in range(width*height)]
+    cells = [{} for _ in range(width * height)]
 
     intersections = []
     for idx, entry in enumerate(entries):
@@ -186,7 +225,7 @@ def get_intersections(entries, grid):
         intersections.append([() for _ in range(length)])
         gap = 1 if AD == 'A' else width
         for i in range(length):
-            cells[cell + i*gap][idx] = i
+            cells[cell + i * gap][idx] = i
 
     for cell in cells:
         if not cell:
@@ -198,11 +237,12 @@ def get_intersections(entries, grid):
 
     return intersections
 
-def solve_puz(filename, clue_model=None):
-    p = puz.read(filename)
+
+def solve_puz(filename, clue_model=None, load_candidates=True, save_candidates=False):
+    p = puz.read(PUZ_DIR + filename)
 
     numbering = p.clue_numbering()
-    initial_grid = [[c for c in numbering.grid[i*p.width:(i+1)*p.width]] for i in range(p.height)]
+    initial_grid = [[c for c in numbering.grid[i * p.width:(i + 1) * p.width]] for i in range(p.height)]
 
     entries = []
 
@@ -217,37 +257,45 @@ def solve_puz(filename, clue_model=None):
     intersections = get_intersections(entries, initial_grid)
 
     if clue_model is None:
-        clue_model = Oracle(p)
+        clue_model = Oracle(p, filename)
 
-    log.info("collecting candidates...")
-    candidates = []
-    for entry in tqdm(entries):
-        candidates.append(clue_model(entry))
-
-    candidates_left = [[True for _ in row] for row in candidates]
-
-
-    import IPython; IPython.embed(); exit(1)
+    initial_remaining_candidates = {idx: list(range(len(clue_model.candidates[idx])))[::-1] for idx in candidates}
 
     # backtracking solution
-    stack = [Grid(initial_grid, candidates_left)]
+    stack = [Grid(initial_grid, initial_remaining_candidates)]
 
+    # TODO:
+    #  - modify algorithm so we try most constrained clues first
+    #  - test if works fast enough (was very slow before)
+    #  - then try to get working with websolver (after fixing VPN issue)
+    #  - if working, test on Gaffneys
+    #  - finally, go back and work more on BERT model
+
+    iters = 0
+    MAX_ITERS = 100
     while stack:
+        input("press enter to continue")
+        iters += 1
+        if iters > MAX_ITERS:
+            return None
         grid = stack.pop()
         found_next = False
-        entry_idx_to_try, candidate_idx_to_try = grid.entry_idx_to_try, grid.candidate_idx_to_try
 
-        for entry_idx in range(entry_idx_to_try, len(entries)):
-            entry_candidates = candidates[entry_idx]
+        while grid.candidates_to_try:
+            entry_idx = grid.candidates_to_try.pop()
+            cand_idx_list = grid.remaining_candidates[entry_idx]
             cell, AD, length, _ = entries[entry_idx].values()
             crossings = intersections[entry_idx]
 
-            for candidate_idx in range(candidate_idx_to_try, len(entry_candidates)):
-                new_grid = grid.place(entry_candidates[candidate_idx], cell, AD, crossings, candidates)
+            while cand_idx_list:
+                cand_idx = cand_idx_list.pop()
+                candidate_word = candidates[entry_idx][cand_idx]
+
+                new_grid = grid.place(candidate_word, entry_idx, entries, clue_model.candidates, crossings)
                 if new_grid:
                     if new_grid.is_filled:
                         return new_grid
-                    grid.entry_idx_to_try, grid.candidate_idx_to_try = entry_idx, candidate_idx + 1
+                    grid.entry_idx_to_try, grid.cand_idx_to_try = entry_idx, cand_idx + 1
                     stack.append(grid)
                     stack.append(new_grid)
                     found_next = True
@@ -260,4 +308,5 @@ def solve_puz(filename, clue_model=None):
 
 if __name__ == '__main__':
     sol = solve_puz(EXAMPLE_PUZ, clue_model=WebSolver())
+
     import IPython; IPython.embed(); exit(1)
