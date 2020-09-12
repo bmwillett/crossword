@@ -42,6 +42,6 @@ def get_all_clues(dir):
     return train_df, test_df
 
 if __name__ == '__main__':
-    train_df, test_df = get_all_clues('./data/puzzles/')
+    train_df, test_df = get_all_clues('../data/puzzles/')
     train_df.to_csv('./data/clues_train.csv')
     test_df.to_csv('./data/clues_test.csv')

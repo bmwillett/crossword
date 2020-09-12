@@ -1,0 +1,3 @@
+from clue_models.web_solver import WebSolver
+from clue_models.oracle_solver import OracleSolver
+from clue_models.bert_solver import BERTSolver
