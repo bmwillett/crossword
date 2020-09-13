@@ -1,11 +1,12 @@
 import string
+import numpy as np
 
 import logging
 log = logging.getLogger("crossword_logger")
 
 from clue_models.base_clue_solver import ClueSolver
 
-ALPHABET = list(string.ascii_lowercase)
+ALPHABET = list(string.ascii_uppercase)
 
 
 class OracleSolver(ClueSolver):

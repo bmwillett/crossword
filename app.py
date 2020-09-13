@@ -1,3 +1,16 @@
+""""
+Main app script
+
+
+TODO:
+ - allow MAX_ITERS to be changed for both searches
+ - review clue model classes, update (make upper case)
+ - add box coloring option to board GUI
+ - work on BERT model (first in isolation, then use with solver)
+
+"""
+
+
 import puz
 import pygame as pg
 from collections import namedtuple
@@ -10,7 +23,7 @@ log = logging.getLogger("crossword_logger")
 logging.basicConfig()
 log.setLevel(logging.DEBUG)
 
-from utils.utils import open_file
+from utils.utils import open_file, dialogbox, yesno_dialog
 from solvers import BacktrackSolver, PrioritySolver
 from utils.board_gui import BoardGUI
 
@@ -27,7 +40,7 @@ DisplayData = namedtuple('DisplayData', ['CLUE_HEIGHT',
 
 PUZ_DIR = './data/puzzles/'
 
-def main(get_solution=True):
+def main():
 
     # load puz file
     fname = open_file()
@@ -39,13 +52,21 @@ def main(get_solution=True):
                 shutil.copyfileobj(fr, fw)
     p = puz.read(fname)
 
-    # TODO: implement pop up window to select clue and solve models
+    # ask user whether generate (partial) solution
+    get_sol = yesno_dialog("Find Solution?", "Do you want to automatically find the solution?")
+    if get_sol and any([c not in ['.', '-'] for c in p.fill]):
+        get_sol = yesno_dialog("Find Solution?", "Puzzle is not empty, finding solution will overwrite puzzle data.  Proceed anyway?")
 
-    # generate (partial) solution
-    if get_solution:
-        # use backtrack or priority solver
-        solver = [BacktrackSolver(clue_model_type="web", puz_name=puz_name),
-                  PrioritySolver(clue_model_type="web", puz_name=puz_name)][1]
+    if get_sol:
+        # make sure p is empty
+        p.fill = [c if c in ['.', '-'] else '-' for c in p.fill]
+
+        # ask user to choose clue model and solver
+        d1 = dialogbox("Clue model?", "Which clue model do you want to use?", o1='Oracle', o2='Web')
+        d2 = dialogbox("Solver?", "Which solver do you want to use?", o1='Backtracking', o2='Priority Search')
+        clue_solver = ["oracle", "web"][d1]
+        solver = [BacktrackSolver(clue_model_type=clue_solver, puz_name=puz_name),
+                  PrioritySolver(clue_model_type=clue_solver, puz_name=puz_name)][d2]
 
         sol, clue_model = solver.solve_puz(p)
         print("\nsolution:")
@@ -87,6 +108,15 @@ def main(get_solution=True):
 
     pg.quit()
 
+    # ask if user wants to save puzzle
+    save = yesno_dialog("Save?", "Do you want to save the puzzle?")
+
+    if save:
+        # TODO: make sure clue models return uppercase letters, then remove .upper here and elsewhere
+        new_fill = ''.join([''.join([l.upper() for l in row]) for row in board.board])
+        p.fill = new_fill
+        p.save(fname)
+
 
 if __name__ == '__main__':
-    main(get_solution=True)
+    main()

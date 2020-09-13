@@ -3,7 +3,7 @@ import logging
 log = logging.getLogger("crossword_logger")
 
 PRINT_FREQ = 1000
-MAX_ITERS = 25000
+MAX_ITERS = 5000
 
 """
 base class for state used in priority search

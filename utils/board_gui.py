@@ -42,7 +42,7 @@ class BoardGUI:
                         self.input_boxes[-1].clue_num = str(self.clues[len(self.input_boxes)-1])
                     if self.board[r][c] != '-':
                         self.input_boxes[-1].text = self.board[r][c].upper()
-                        self.input_boxes[-1].txt_surface = self.board_data.GRID_FONT.render(board[r][c].upper(), True, self.board_data.COLOR_TEXT)
+                        self.input_boxes[-1].txt_surface = self.board_data.GRID_FONT.render(self.board[r][c].upper(), True, self.board_data.COLOR_TEXT)
                 else:
                     self.input_boxes.append(NullBox())
 
@@ -65,6 +65,7 @@ class BoardGUI:
                 if box.just_entered_letter:
                     box.just_entered_letter = False
                     just_entered_letter = True
+                    self.board[i // self.rows][i % self.cols] = box.text
 
         if just_entered_letter:
             self.input_boxes[self.cols * self.active_r + self.active_c].active = False

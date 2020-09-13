@@ -30,7 +30,7 @@ class Solver:
             entries.append({'cell': cell, 'AD': 'D', 'length': length, 'clue': clue})
 
         if self.clue_model_type == 'oracle':
-            self.clue_model = Oracle(p, entries, self.puz_name, load=self.load_candidates, save=self.save_candidates)
+            self.clue_model = OracleSolver(p, entries, self.puz_name, load=self.load_candidates, save=self.save_candidates)
         elif self.clue_model_type == 'web':
             self.clue_model = WebSolver(entries, self.puz_name, load=self.load_candidates, save=self.save_candidates)
         else:

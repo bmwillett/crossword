@@ -61,7 +61,7 @@ class WebSolver(ClueSolver):
                 i += 1
             if len(word) != length:
                 continue
-            out.append(''.join(word).lower())
+            out.append(''.join(word).upper())
             if len(out) == self.num_candidates_per_entry:
                 break
         log.info(f"found candidates: {out}")
